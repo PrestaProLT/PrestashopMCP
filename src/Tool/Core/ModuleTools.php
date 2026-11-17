@@ -768,7 +768,7 @@ class ModuleTools extends AbstractToolGroup
         $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
         // Runtime data (gateway logs, customer exports, backups) is personal or
         // sensitive data, not module logic: never served.
-        if (in_array($ext, self::DATA_EXT, true) || preg_match(self::DATA_DIR_PATTERN, '/' . str_replace('\\', '/', $rel))) {
+        if ($this->isRuntimeData($rel)) {
             throw new ToolException(
                 'Refused: "' . $rel . '" is runtime data (logs, exports, uploads, cache or backups), not module code.',
                 'Read the module code, templates, SQL schema or docs instead. Errors are available through shop_log_list.'
@@ -918,7 +918,7 @@ class ModuleTools extends AbstractToolGroup
                 $rel = $f['path'];
                 $base = basename($rel);
                 $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
-                if (!in_array($ext, self::TEXT_EXT, true) || $this->isSecretFile($base) || preg_match('/\.min\.(js|css)$/i', $base) || $ext === 'map') {
+                if (!in_array($ext, self::TEXT_EXT, true) || $this->isSecretFile($base) || $this->isRuntimeData($rel) || preg_match('/\.min\.(js|css)$/i', $base) || $ext === 'map') {
                     continue;
                 }
                 if ($glob !== '' && !fnmatch($glob, $base) && !fnmatch($glob, $rel)) {
@@ -1270,6 +1270,19 @@ class ModuleTools extends AbstractToolGroup
         return $real;
     }
 
+    /**
+     * Runtime data (gateway logs, customer exports, uploads, caches, backups)
+     * is never read, searched or scanned: it is personal / sensitive data, not
+     * module code. Single rule shared by every content-reading tool.
+     */
+    private function isRuntimeData(string $rel): bool
+    {
+        $rel = '/' . ltrim(str_replace('\\', '/', $rel), '/');
+        $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+
+        return in_array($ext, self::DATA_EXT, true) || (bool) preg_match(self::DATA_DIR_PATTERN, $rel);
+    }
+
     private function isSecretFile(string $base): bool
     {
         $b = strtolower($base);
@@ -1525,7 +1538,7 @@ class ModuleTools extends AbstractToolGroup
                 continue;
             }
             $ext = strtolower(pathinfo($f['path'], PATHINFO_EXTENSION));
-            if (!in_array($ext, ['php', 'sql', 'yml', 'yaml', 'tpl', 'twig', 'inc'], true) || $f['size'] > self::SCAN_FILE_MAX || $this->isSecretFile(basename($f['path']))) {
+            if (!in_array($ext, ['php', 'sql', 'yml', 'yaml', 'tpl', 'twig', 'inc'], true) || $f['size'] > self::SCAN_FILE_MAX || $this->isSecretFile(basename($f['path'])) || $this->isRuntimeData($f['path'])) {
                 continue;
             }
             if ($bytes > self::SCAN_MAX_BYTES) {

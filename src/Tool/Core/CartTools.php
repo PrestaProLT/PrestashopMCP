@@ -127,7 +127,6 @@ class CartTools extends AbstractToolGroup
                 'shop' => true,
                 'lang' => true,
                 'permission' => ['AdminCartRules', 'add'],
-                'permissions' => [['AdminCartRules', 'edit']],
                 'keywords' => ['voucher', 'coupon', 'discount code', 'promo'],
                 'handler' => 'ruleCreate',
             ],

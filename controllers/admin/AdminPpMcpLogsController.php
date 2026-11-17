@@ -32,6 +32,11 @@ class AdminPpMcpLogsController extends ModuleAdminController
         $this->_select = 'k.`name` AS `key_name`, CONCAT(e.`firstname`, " ", e.`lastname`) AS `employee_name`';
         $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'ppmcp_key` k ON (k.`id_ppmcp_key` = a.`id_ppmcp_key`)
             LEFT JOIN `' . _DB_PREFIX_ . 'employee` e ON (e.`id_employee` = a.`id_employee`)';
+        // Arguments/results can contain customer data: employees who are not
+        // super admins only see (and export) entries made under their identity.
+        if (!$this->isSuperAdmin()) {
+            $this->_where = ' AND a.`id_employee` = ' . (int) $this->context->employee->id;
+        }
 
         $statuses = ['ok' => 'ok', 'error' => 'error', 'denied' => 'denied'];
         $this->fields_list = [
@@ -114,6 +119,18 @@ class AdminPpMcpLogsController extends ModuleAdminController
         }
 
         return parent::processBulkDelete();
+    }
+
+    protected function loadObject($opt = false)
+    {
+        $obj = parent::loadObject($opt);
+        if ($obj && !empty($obj->id) && !$this->isSuperAdmin() && (int) $obj->id_employee !== (int) $this->context->employee->id) {
+            $this->errors[] = $this->trans('Log entry not found.', [], 'Modules.Ppmcp.Admin');
+
+            return false;
+        }
+
+        return $obj;
     }
 
     public function renderView()
