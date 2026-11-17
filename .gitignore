@@ -1,0 +1,5 @@
+/vendor/
+config_*.xml
+*.log
+.DS_Store
+/tests/output/

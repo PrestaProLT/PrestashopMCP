@@ -1,0 +1,27 @@
+{
+    "name": "prestapro/ppmcp",
+    "description": "PrestaPro MCP Server - Model Context Protocol server module for PrestaShop 1.7, 8 and 9",
+    "type": "prestashop-module",
+    "license": "AFL-3.0",
+    "authors": [
+        {
+            "name": "PrestaPro",
+            "homepage": "https://prestapro.lt"
+        }
+    ],
+    "require": {
+        "php": ">=7.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "PrestaPro\\PpMcp\\": "src/"
+        },
+        "classmap": [
+            "classes/",
+            "integration/"
+        ]
+    },
+    "config": {
+        "prepend-autoloader": false
+    }
+}
