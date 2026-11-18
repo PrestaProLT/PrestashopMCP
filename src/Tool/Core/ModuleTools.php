@@ -1003,10 +1003,22 @@ class ModuleTools extends AbstractToolGroup
                 throw new ToolException('Module "' . $name . '" is not installed.', 'module_list shows installed modules.');
             }
             $info = is_file(_PS_MODULE_DIR_ . $name . '/' . $name . '.php') ? $this->parseMainFile($name, true) : [];
-            $hooks = $this->explainHooks($name, $idModule, $idShop, null, $info, !empty($info['widget']));
+            // Load the class so inherited hook methods (shared base classes, traits) are seen.
+            $instance = null;
+            if ($info) {
+                try {
+                    $instance = \Module::getInstanceByName($name) ?: null;
+                } catch (\Throwable $e) {
+                    $instance = null;
+                }
+            }
+            $isWidget = $instance ? $instance instanceof \PrestaShop\PrestaShop\Core\Module\WidgetInterface : !empty($info['widget']);
+            $hooks = $this->explainHooks($name, $idModule, $idShop, $instance, $info, $isWidget);
             $hooks['module'] = $name;
             $hooks['id_shop'] = $idShop;
-            $hooks['note'] = 'Implementation check is static (main file + traits/classes it declares); use module_explain for the reflection-based check.';
+            if ($hooks['method_source'] === 'static') {
+                $hooks['note'] = 'The module class could not be loaded, so the implementation check is static (main file + traits/classes it declares). Methods inherited from a parent class are not seen.';
+            }
 
             return $hooks;
         }
@@ -1773,6 +1785,8 @@ class ModuleTools extends AbstractToolGroup
                         $row['via'] = '__call()';
                     } elseif ($lc === 'registergdprconsent') {
                         $row['via'] = 'marker hook read by psgdpr (no method needed)';
+                    } elseif ($source === 'static' && !empty($info['parent']) && !in_array(strtolower(ltrim((string) $info['parent'], '\\')), self::CORE_CLASSES, true)) {
+                        $row['method'] = 'not found in main file (parent class ' . $info['parent'] . ' may implement it)';
                     } else {
                         $row['method'] = 'MISSING';
                         $withoutMethod[] = $hn;

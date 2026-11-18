@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-11-18
+
+* `module_hook_list` (module mode) now loads the module class, so hook methods inherited from a
+  shared parent class or trait are seen. Before, they were all reported as MISSING (found on
+  modules extending a common base class, e.g. carrier modules). If the class cannot be loaded,
+  hooks a non-core parent class may implement are no longer flagged MISSING.
+
 ## 1.2.0 — 2026-11-18
 
 * Features: `catalog_feature_create`, `catalog_feature_update`, `catalog_feature_delete` and
