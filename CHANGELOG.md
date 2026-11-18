@@ -13,6 +13,11 @@
   Upgrading removes the old "PrestaPro MCP" menu.
 * Renamed to "PrestaShop MCP - easy connect with AI".
 * API keys list shows how each key was created (API key / OAuth app).
+* Security: redirect URIs must match a strict URL grammar (no user info, backslashes, spaces, control
+  characters or fragments) before the host allow-list check. The approval page marks the app name as
+  unverified, shows the client ID and where it registered from, and when the connecting page was
+  opened from another IP than the approving employee's it warns and requires an explicit confirmation
+  (protection against someone sending an employee a code to approve).
 
 ## 1.2.1 — 2026-11-18
 

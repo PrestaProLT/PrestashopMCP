@@ -30,9 +30,11 @@
       <div class="panel-heading"><i class="icon-link"></i> {l s='Approve connection' d='Modules.Ppmcp.Admin'} <code>{$ppmcp_request.user_code|escape:'htmlall':'UTF-8'}</code></div>
       <div class="alert alert-warning">{l s='Approve only if you started this connection yourself just now and see this same code on your screen. Never approve a code that someone sent you: they would get access to the shop.' d='Modules.Ppmcp.Admin'}</div>
       <table class="table">
-        <tr><th style="width:220px">{l s='Application' d='Modules.Ppmcp.Admin'}</th><td><strong>{$ppmcp_request.client_name|escape:'htmlall':'UTF-8'}</strong></td></tr>
+        <tr><th style="width:220px">{l s='Application' d='Modules.Ppmcp.Admin'}</th><td><strong>{$ppmcp_request.client_name|escape:'htmlall':'UTF-8'}</strong> <span class="label label-default">{l s='name given by the app, not verified' d='Modules.Ppmcp.Admin'}</span><br>
+          <small class="text-muted">{l s='Client ID' d='Modules.Ppmcp.Admin'} <code>{$ppmcp_request.client_id|escape:'htmlall':'UTF-8'}</code>, {l s='registered' d='Modules.Ppmcp.Admin'} {$ppmcp_request.client_date_add|escape:'htmlall':'UTF-8'} {l s='from' d='Modules.Ppmcp.Admin'} {$ppmcp_request.client_ip|escape:'htmlall':'UTF-8'}</small></td></tr>
         <tr><th>{l s='Returns to' d='Modules.Ppmcp.Admin'}</th><td><code>{$ppmcp_request.redirect_host|escape:'htmlall':'UTF-8'}</code></td></tr>
-        <tr><th>{l s='Started from' d='Modules.Ppmcp.Admin'}</th><td>{$ppmcp_request.ip|escape:'htmlall':'UTF-8'} · {$ppmcp_request.date_add|escape:'htmlall':'UTF-8'}<br><small class="text-muted">{$ppmcp_request.user_agent|escape:'htmlall':'UTF-8'}</small></td></tr>
+        <tr><th>{l s='Started from' d='Modules.Ppmcp.Admin'}</th><td>{$ppmcp_request.ip|escape:'htmlall':'UTF-8'} · {$ppmcp_request.date_add|escape:'htmlall':'UTF-8'}<br><small class="text-muted">{$ppmcp_request.user_agent|escape:'htmlall':'UTF-8'}</small>
+          {if $ppmcp_request.other_network}<br><span class="text-danger"><strong>{l s='Your address is %ip%: this request was started from another network.' sprintf=['%ip%' => $ppmcp_request.my_ip] d='Modules.Ppmcp.Admin'}</strong></span>{/if}</td></tr>
         <tr><th>{l s='Requested scopes' d='Modules.Ppmcp.Admin'}</th><td>{if $ppmcp_request.requested}{foreach $ppmcp_request.requested as $s}<span class="badge">{$s|escape:'htmlall':'UTF-8'}</span> {/foreach}{else}—{/if}</td></tr>
       </table>
 
@@ -77,6 +79,12 @@
           </select>
         </div>
       </div>
+      {if $ppmcp_request.other_network}
+        <div class="alert alert-danger">
+          <p>{l s='The connecting page was opened from another network than the one you are using now. This is normal only if you started the connection yourself on another device (for example your phone). If someone sent you this code, decline: approving would give them access to the shop.' d='Modules.Ppmcp.Admin'}</p>
+          <div class="checkbox"><label><input type="checkbox" name="confirm_other_network" value="1"> {l s='I started this connection myself on another device.' d='Modules.Ppmcp.Admin'}</label></div>
+        </div>
+      {/if}
       <div class="panel-footer">
         <button type="submit" name="submitPpMcpApprove" class="btn btn-primary pull-right"><i class="process-icon-ok"></i> {l s='Approve' d='Modules.Ppmcp.Admin'}</button>
         <button type="submit" name="submitPpMcpDeny" class="btn btn-default"><i class="process-icon-cancel"></i> {l s='Decline' d='Modules.Ppmcp.Admin'}</button>

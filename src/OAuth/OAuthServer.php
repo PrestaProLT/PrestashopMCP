@@ -292,26 +292,31 @@ class OAuthServer
      */
     public function redirectUriProblem(string $uri): ?string
     {
-        if (strlen($uri) > 2000 || strpos($uri, '#') !== false) {
-            return 'Redirect URI is too long or has a fragment.';
+        if (strlen($uri) > 2000) {
+            return 'Redirect URI is too long.';
         }
-        $parts = parse_url($uri);
-        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
-            return 'Redirect URI must be an absolute URL.';
+        // Strict grammar instead of parse_url(): no userinfo (@), backslashes,
+        // whitespace, control characters or fragments, so the host checked here
+        // is the host every browser / URL parser sees.
+        if (!preg_match('#^(https?)://([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[::1\])(?::([0-9]{1,5}))?(?:/[A-Za-z0-9._~!$&\'()*+,;=:%/-]*)?(?:\?[A-Za-z0-9._~!$&\'()*+,;=:%/?-]*)?$#i', $uri, $m)) {
+            return 'Redirect URI must be a plain absolute URL (no user info, spaces, backslashes or fragment).';
         }
-        $scheme = strtolower($parts['scheme']);
-        $host = strtolower(trim($parts['host'], '[]'));
+        $scheme = strtolower($m[1]);
+        $host = strtolower(trim($m[2], '[]'));
+        if (strpos($host, '..') !== false || (isset($m[3]) && $m[3] !== '' && (int) $m[3] > 65535)) {
+            return 'Redirect URI host or port is not valid.';
+        }
         $loopback = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
         if ($scheme !== 'https' && !($scheme === 'http' && $loopback)) {
             return 'Redirect URI must use https (http only for localhost).';
         }
         foreach (self::allowedRedirectHosts() as $allowed) {
-            if ($host === $allowed || (strpos($allowed, '*.') === 0 && substr($host, -strlen($allowed) + 1) === substr($allowed, 1))) {
+            if ($host === $allowed || (strpos($allowed, '*.') === 0 && strlen($host) > strlen($allowed) - 1 && substr($host, -strlen($allowed) + 1) === substr($allowed, 1))) {
                 return null;
             }
         }
 
-        return 'Redirect host "' . $host . '" is not allowed. Add it under PrestaPro MCP > Settings > OAuth redirect hosts.';
+        return 'Redirect host "' . $host . '" is not allowed. Add it on the module Settings tab under OAuth redirect hosts.';
     }
 
     /**
@@ -496,7 +501,7 @@ class OAuthServer
             return null;
         }
         $r = \Db::getInstance()->getRow(
-            'SELECT r.*, c.`client_name` FROM `' . _DB_PREFIX_ . 'ppmcp_oauth_request` r
+            'SELECT r.*, c.`client_name`, c.`ip` AS client_ip, c.`date_add` AS client_date_add FROM `' . _DB_PREFIX_ . 'ppmcp_oauth_request` r
              LEFT JOIN `' . _DB_PREFIX_ . 'ppmcp_oauth_client` c ON c.`client_id` = r.`client_id`
              WHERE r.`user_code` = \'' . pSQL($code) . '\' AND r.`status` = \'pending\' AND r.`date_expire` > NOW()',
             false
@@ -508,7 +513,7 @@ class OAuthServer
     public function findPendingById(int $id): ?array
     {
         $r = \Db::getInstance()->getRow(
-            'SELECT r.*, c.`client_name` FROM `' . _DB_PREFIX_ . 'ppmcp_oauth_request` r
+            'SELECT r.*, c.`client_name`, c.`ip` AS client_ip, c.`date_add` AS client_date_add FROM `' . _DB_PREFIX_ . 'ppmcp_oauth_request` r
              LEFT JOIN `' . _DB_PREFIX_ . 'ppmcp_oauth_client` c ON c.`client_id` = r.`client_id`
              WHERE r.`id_ppmcp_oauth_request` = ' . (int) $id . ' AND r.`status` = \'pending\' AND r.`date_expire` > NOW()',
             false

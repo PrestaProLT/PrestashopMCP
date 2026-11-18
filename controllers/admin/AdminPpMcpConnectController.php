@@ -68,6 +68,12 @@ class AdminPpMcpConnectController extends ModuleAdminController
 
             return;
         }
+        if (Tools::isSubmit('submitPpMcpApprove') && $this->otherNetwork($request) && !Tools::getValue('confirm_other_network')) {
+            $this->errors[] = $this->t('This request was started from another network than yours. Confirm that you started it yourself on another device, or decline it.');
+            $this->request = $request;
+
+            return;
+        }
         if (Tools::isSubmit('submitPpMcpDeny')) {
             $server->deny($request, (int) $this->context->employee->id);
             $this->result = 'denied';
@@ -116,6 +122,15 @@ class AdminPpMcpConnectController extends ModuleAdminController
         }
     }
 
+    /**
+     * Consent-phishing guard: a request started from another IP than the
+     * approving employee's is suspicious (someone may have sent them the code).
+     */
+    private function otherNetwork(array $request): bool
+    {
+        return (string) $request['ip'] !== (string) Tools::getRemoteAddr();
+    }
+
     private function defaultName(array $request): string
     {
         $client = trim((string) $request['client_name']);
@@ -149,6 +164,11 @@ class AdminPpMcpConnectController extends ModuleAdminController
                 'client_name' => (string) $r['client_name'],
                 'redirect_host' => (string) parse_url($r['redirect_uri'], PHP_URL_HOST),
                 'ip' => $r['ip'],
+                'my_ip' => Tools::getRemoteAddr(),
+                'other_network' => $this->otherNetwork($r),
+                'client_id' => $r['client_id'],
+                'client_ip' => isset($r['client_ip']) ? $r['client_ip'] : '',
+                'client_date_add' => isset($r['client_date_add']) ? $r['client_date_add'] : '',
                 'user_agent' => $r['user_agent'],
                 'date_add' => $r['date_add'],
                 'id_shop' => (int) $r['id_shop'],
