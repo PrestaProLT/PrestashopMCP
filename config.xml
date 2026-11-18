@@ -2,7 +2,7 @@
 <module>
     <name>ppmcp</name>
     <displayName><![CDATA[PrestaPro MCP Server]]></displayName>
-    <version><![CDATA[1.1.0]]></version>
+    <version><![CDATA[1.2.0]]></version>
     <description><![CDATA[Model Context Protocol (MCP) server for shop managers: catalog, orders, customers, diagnostics and module insight for AI assistants.]]></description>
     <author><![CDATA[PrestaPro]]></author>
     <tab><![CDATA[administration]]></tab>

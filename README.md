@@ -93,6 +93,7 @@ Markdown files in `skills/` (and `mcp/skills/` of other modules) with front matt
 | `product_not_visible` | product missing in category / search / 404 |
 | `price_problem` | why a price is what it is |
 | `catalog_bulk_edit` | safe bulk changes (dry run, batches, multistore, translations) |
+| `catalog_features_attributes` | features, attributes and their values: duplicates, languages, safe deletes |
 | `order_investigation` | order complaints, statuses, tracking, notes |
 | `daily_manager_report` | morning overview with action items |
 | `multistore_multilang` | rules for shops and languages |

@@ -168,23 +168,9 @@ class CatalogTools extends AbstractToolGroup
                 'handler' => 'stockSet',
             ],
             [
-                'name' => 'catalog_feature_list',
-                'title' => 'List product features',
-                'description' => 'Lists the predefined product features of the shop (Catalog > Attributes & Features > Features). Without id_feature: features with their number of predefined values and of products using them. With id_feature: the predefined values of that feature (id_feature_value), filterable by value text. Only predefined values are listed; custom (per-product free text) values are never offered. Use the ids with catalog_product_feature_set.',
-                'params' => array_merge([
-                    'id_feature' => ['type' => 'integer', 'minimum' => 1, 'description' => 'List the predefined values of this feature.'],
-                    'query' => ['type' => 'string', 'description' => 'Part of the feature name (or of the value text when id_feature is given).'],
-                ], self::paginationParams(50, 200)),
-                'shop' => true,
-                'lang' => true,
-                'permission' => ['AdminProducts', 'view'],
-                'keywords' => ['feature', 'features', 'characteristic', 'specification', 'property', 'value'],
-                'handler' => 'featureList',
-            ],
-            [
                 'name' => 'catalog_product_feature_set',
                 'title' => 'Set product features',
-                'description' => 'Assigns predefined feature values to a product, and/or removes features from it. Only predefined values (catalog_feature_list) are accepted: custom free-text values and new features or values are refused, so the feature dictionary stays clean. Each value id implies its feature; by default the values given for a feature replace that feature\'s current values on the product (mode=add keeps them). Features not mentioned are left unchanged. Product features are shared by all shops of the product.',
+                'description' => 'Assigns predefined feature values to a product, and/or removes features from it. Only predefined values (catalog_feature_list) are accepted: custom free-text values are refused; a missing value is added first with catalog_feature_value_create. Each value id implies its feature; by default the values given for a feature replace that feature\'s current values on the product (mode=add keeps them). Features not mentioned are left unchanged. Product features are shared by all shops of the product.',
                 'params' => [
                     'id_product' => self::idParam('Product id.'),
                     'values' => ['type' => 'array', 'items' => ['type' => 'integer', 'minimum' => 1], 'maxItems' => 100, 'description' => 'Predefined id_feature_value ids to assign (catalog_feature_list with id_feature).'],
@@ -840,78 +826,6 @@ class CatalogTools extends AbstractToolGroup
     // Features (predefined values only)
     // ------------------------------------------------------------------
 
-    public function featureList(array $args, ExecutionContext $ctx): array
-    {
-        $s = (int) $ctx->idShop;
-        $l = (int) $ctx->idLang;
-        $q = isset($args['query']) ? trim((string) $args['query']) : '';
-        $warnings = [];
-        if (!$this->conf('PS_FEATURE_FEATURE_ACTIVE', $s) && \Configuration::hasKey('PS_FEATURE_FEATURE_ACTIVE')) {
-            $warnings[] = 'Features are disabled in this shop (PS_FEATURE_FEATURE_ACTIVE=0); they are not shown on the storefront.';
-        }
-
-        if (!empty($args['id_feature'])) {
-            $idF = (int) $args['id_feature'];
-            $feature = $this->featureRow($idF, $s, $l);
-            $where = 'fv.`id_feature` = ' . $idF . ' AND ' . self::predefinedSql('fv');
-            if ($q !== '') {
-                $where .= ' AND fvl.`value` LIKE \'%' . self::likeValue($q) . '%\'';
-            }
-            $from = ' FROM `' . _DB_PREFIX_ . 'feature_value` fv
-                LEFT JOIN `' . _DB_PREFIX_ . 'feature_value_lang` fvl ON fvl.`id_feature_value` = fv.`id_feature_value` AND fvl.`id_lang` = ' . $l . '
-                WHERE ' . $where;
-            $total = (int) $this->db()->getValue('SELECT COUNT(*)' . $from);
-            $rows = $this->db()->executeS(
-                'SELECT fv.`id_feature_value`, fvl.`value`,
-                    (SELECT COUNT(DISTINCT fp.`id_product`) FROM `' . _DB_PREFIX_ . 'feature_product` fp WHERE fp.`id_feature_value` = fv.`id_feature_value`) AS products'
-                . $from . ' ORDER BY fvl.`value` LIMIT ' . (int) $args['offset'] . ', ' . (int) $args['limit']
-            ) ?: [];
-            $items = [];
-            foreach ($rows as $r) {
-                $items[] = [
-                    'id_feature_value' => (int) $r['id_feature_value'],
-                    'value' => (string) $r['value'],
-                    'products' => (int) $r['products'],
-                ];
-            }
-            $out = $this->paged($items, $total, $args, 'values');
-            $out['feature'] = $feature;
-            $out['_warnings'] = $warnings;
-
-            return $out;
-        }
-
-        $where = '1';
-        if ($q !== '') {
-            $where = 'fl.`name` LIKE \'%' . self::likeValue($q) . '%\'';
-        }
-        $from = ' FROM `' . _DB_PREFIX_ . 'feature` f
-            INNER JOIN `' . _DB_PREFIX_ . 'feature_shop` fs ON fs.`id_feature` = f.`id_feature` AND fs.`id_shop` = ' . $s . '
-            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = f.`id_feature` AND fl.`id_lang` = ' . $l . '
-            WHERE ' . $where;
-        $total = (int) $this->db()->getValue('SELECT COUNT(*)' . $from);
-        $rows = $this->db()->executeS(
-            'SELECT f.`id_feature`, f.`position`, fl.`name`,
-                (SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'feature_value` fv WHERE fv.`id_feature` = f.`id_feature` AND ' . self::predefinedSql('fv') . ') AS predefined_values,
-                (SELECT COUNT(DISTINCT fp.`id_product`) FROM `' . _DB_PREFIX_ . 'feature_product` fp WHERE fp.`id_feature` = f.`id_feature`) AS products'
-            . $from . ' ORDER BY f.`position`, fl.`name` LIMIT ' . (int) $args['offset'] . ', ' . (int) $args['limit']
-        ) ?: [];
-        $items = [];
-        foreach ($rows as $r) {
-            $items[] = [
-                'id_feature' => (int) $r['id_feature'],
-                'name' => (string) $r['name'],
-                'position' => (int) $r['position'],
-                'predefined_values' => (int) $r['predefined_values'],
-                'products' => (int) $r['products'],
-            ];
-        }
-        $out = $this->paged($items, $total, $args, 'features');
-        $out['_warnings'] = $warnings;
-
-        return $out;
-    }
-
     public function productFeatureSet(array $args, ExecutionContext $ctx): array
     {
         $s = (int) $ctx->idShop;
@@ -968,7 +882,7 @@ class CatalogTools extends AbstractToolGroup
             }
         }
         if ($errors) {
-            throw new ToolException('Validation failed: ' . implode(' | ', $errors), 'Use catalog_feature_list to find predefined values; nothing was saved.');
+            throw new ToolException('Validation failed: ' . implode(' | ', $errors), 'Use catalog_feature_list to find predefined values (catalog_feature_value_create adds a missing one); nothing was saved.');
         }
 
         $current = $this->productFeatureRows($id, $l);
@@ -1041,27 +955,6 @@ class CatalogTools extends AbstractToolGroup
             'features_removed' => $removedFeatures,
             'features' => $ctx->dryRun ? null : $this->formatProductFeatures($this->productFeatureRows($id, $l)),
         ];
-    }
-
-    /**
-     * @throws ToolException
-     */
-    private function featureRow(int $idFeature, int $idShop, int $idLang): array
-    {
-        $r = $this->db()->getRow(
-            'SELECT f.`id_feature`, fl.`name`, fs.`id_feature` AS in_shop FROM `' . _DB_PREFIX_ . 'feature` f
-            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = f.`id_feature` AND fl.`id_lang` = ' . $idLang . '
-            LEFT JOIN `' . _DB_PREFIX_ . 'feature_shop` fs ON fs.`id_feature` = f.`id_feature` AND fs.`id_shop` = ' . $idShop . '
-            WHERE f.`id_feature` = ' . $idFeature
-        );
-        if (!$r) {
-            throw new ToolException(sprintf('Feature #%d does not exist.', $idFeature), 'Call catalog_feature_list without id_feature.');
-        }
-        if (!$r['in_shop']) {
-            throw new ToolException(sprintf('Feature #%d is not available in shop #%d.', $idFeature, $idShop));
-        }
-
-        return ['id_feature' => (int) $r['id_feature'], 'name' => (string) $r['name']];
     }
 
     /** Rows of feature_product for a product, with names, values and the custom flag. */
@@ -1184,18 +1077,7 @@ class CatalogTools extends AbstractToolGroup
                 // The product stays flagged indexed = 0 and is picked up by the next rebuild.
             }
         }
-        if (\Module::isEnabled('ps_facetedsearch')) {
-            $faceted = \Module::getInstanceByName('ps_facetedsearch');
-            if ($faceted && method_exists($faceted, 'invalidateLayeredFilterBlockCache')) {
-                $faceted->invalidateLayeredFilterBlockCache();
-            }
-        }
-    }
-
-    /** Predefined (non-custom) feature values; custom is NULL on some old rows. */
-    private static function predefinedSql(string $alias): string
-    {
-        return 'IFNULL(' . $alias . '.`custom`, 0) = 0';
+        $this->invalidateFacetedCache();
     }
 
     /**

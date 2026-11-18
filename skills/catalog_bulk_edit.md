@@ -18,11 +18,10 @@ when_to_use: Any change touching more than a handful of products - price updates
 4. **Prices.** `price` is the tax-excluded base price. Combinations have price *impacts*.
    Discounts belong in specific prices (`catalog_specific_price_create`) – do not lower the base
    price for a temporary promotion. Check the result with `catalog_price_explain`.
-5. **Features.** Only predefined feature values can be assigned. Find them with
-   `catalog_feature_list` (then `id_feature` for its values) and assign with
-   `catalog_product_feature_set`. If the needed value does not exist, do not invent one – tell
-   the manager to add it in Catalog > Attributes & Features > Features first. Features are shared
-   by all shops of a product.
+5. **Features.** Assign only predefined feature values (`catalog_feature_list`,
+   `catalog_product_feature_set`). If a needed value is missing, ask the manager before creating it
+   with `catalog_feature_value_create` (see the `catalog_features_attributes` skill). Features are
+   shared by all shops of a product.
 6. **Dry run first.** Run the first 2-3 products with `dry_run: true`, show the `changes`
    (before → after), get approval, then apply.
 7. **Batch and verify.** Apply in small batches (≤ 20 calls), stop on the first error and

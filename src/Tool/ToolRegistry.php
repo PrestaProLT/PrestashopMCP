@@ -24,7 +24,7 @@ class ToolRegistry
     /** Core domains. A module with one of these names cannot register tools. */
     const CORE_GROUPS = [
         'shop' => 'PrestaPro\\PpMcp\\Tool\\Core\\ShopTools',
-        'catalog' => 'PrestaPro\\PpMcp\\Tool\\Core\\CatalogTools',
+        'catalog' => ['PrestaPro\\PpMcp\\Tool\\Core\\CatalogTools', 'PrestaPro\\PpMcp\\Tool\\Core\\CatalogDictionaryTools'],
         'order' => 'PrestaPro\\PpMcp\\Tool\\Core\\OrderTools',
         'customer' => 'PrestaPro\\PpMcp\\Tool\\Core\\CustomerTools',
         'cart' => 'PrestaPro\\PpMcp\\Tool\\Core\\CartTools',
@@ -100,20 +100,23 @@ class ToolRegistry
 
     private function loadCore(): void
     {
-        foreach (self::CORE_GROUPS as $owner => $class) {
-            if (!class_exists($class)) {
-                continue;
-            }
-            /** @var AbstractToolGroup $group */
-            $group = new $class($this->module);
-            foreach ($group->tools() as $def) {
-                $method = isset($def['handler']) ? $def['handler'] : '';
-                if (!method_exists($group, $method)) {
-                    $this->providerErrors[] = sprintf('Core tool %s: handler %s missing', isset($def['name']) ? $def['name'] : '?', $method);
+        // An owner may be split over several classes (catalog: products + dictionaries).
+        foreach (self::CORE_GROUPS as $owner => $classes) {
+            foreach ((array) $classes as $class) {
+                if (!class_exists($class)) {
                     continue;
                 }
-                $tool = ToolDefinition::fromArray($def, $owner, [$group, $method], false);
-                $this->tools[$tool->name] = $tool;
+                /** @var AbstractToolGroup $group */
+                $group = new $class($this->module);
+                foreach ($group->tools() as $def) {
+                    $method = isset($def['handler']) ? $def['handler'] : '';
+                    if (!method_exists($group, $method)) {
+                        $this->providerErrors[] = sprintf('Core tool %s: handler %s missing', isset($def['name']) ? $def['name'] : '?', $method);
+                        continue;
+                    }
+                    $tool = ToolDefinition::fromArray($def, $owner, [$group, $method], false);
+                    $this->tools[$tool->name] = $tool;
+                }
             }
         }
     }

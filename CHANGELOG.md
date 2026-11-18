@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 — 2026-11-18
+
+* Features: `catalog_feature_create`, `catalog_feature_update`, `catalog_feature_delete` and
+  `catalog_feature_value_create`, `catalog_feature_value_update`, `catalog_feature_value_delete`
+  (predefined values only; custom per-product values are never created or edited).
+* Attributes: `catalog_attribute_list`, `catalog_attribute_create`, `catalog_attribute_update`,
+  `catalog_attribute_delete` and `catalog_attribute_value_create`, `catalog_attribute_value_update`,
+  `catalog_attribute_value_delete` (select / radio / color, swatch colors).
+* Duplicate names are refused (case and spacing ignored, per language) and the existing id is
+  returned. Languages left out on create get the default-language text with a warning.
+* Deleting a record still in use (products, combinations) needs `confirm_in_use: true`; dry run
+  shows what would be affected. Deletes remove the record from every shop.
+* New skill `catalog_features_attributes`. Core tool owners can now span several classes
+  (`catalog` = `CatalogTools` + `CatalogDictionaryTools`).
+
 ## 1.1.0 — 2026-11-18
 
 * `catalog_feature_list`: features of the shop and their predefined values.

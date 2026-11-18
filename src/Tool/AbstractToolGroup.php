@@ -263,4 +263,17 @@ abstract class AbstractToolGroup
     {
         return ['type' => 'integer', 'minimum' => 1, 'description' => $description, 'required' => $required];
     }
+
+    /** Drops the ps_facetedsearch filter block cache (it holds feature / attribute names and counts). */
+    protected function invalidateFacetedCache(): void
+    {
+        if (!\Module::isEnabled('ps_facetedsearch')) {
+            return;
+        }
+        $faceted = \Module::getInstanceByName('ps_facetedsearch');
+        if ($faceted && method_exists($faceted, 'invalidateLayeredFilterBlockCache')) {
+            $faceted->invalidateLayeredFilterBlockCache();
+        }
+    }
+
 }
