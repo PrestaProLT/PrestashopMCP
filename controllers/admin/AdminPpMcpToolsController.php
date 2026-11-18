@@ -87,7 +87,7 @@ class AdminPpMcpToolsController extends ModuleAdminController
             'ppmcp_action' => $this->context->link->getAdminLink('AdminPpMcpTools'),
             'ppmcp_read_only' => (bool) Configuration::getGlobalValue('PPMCP_READ_ONLY'),
         ]);
-        $this->content = $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'ppmcp/views/templates/admin/tools.tpl');
+        $this->content = $this->module->renderNav('AdminPpMcpTools') . $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'ppmcp/views/templates/admin/tools.tpl');
         parent::initContent();
     }
 }

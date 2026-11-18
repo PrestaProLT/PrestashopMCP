@@ -1,6 +1,6 @@
 # Tools reference
 
-Generated from `tools/list` (PrestaPro MCP 1.2.1). Every tool also accepts the injected arguments
+Generated from `tools/list` (PrestaPro MCP 1.3.0). Every tool also accepts the injected arguments
 `id_shop` / `lang` where noted, and write tools accept `dry_run`. Tools a key may not call are not listed to it.
 
 ## Shop context (`shop_*`)

@@ -1,7 +1,7 @@
-# PrestaPro MCP Server (`ppmcp`)
+# PrestaShop MCP - easy connect with AI (`ppmcp`)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that runs **inside PrestaShop**
-as a module. It lets AI assistants (Claude Code, Claude Desktop, claude.ai connectors, Cursor…)
+as a module. It lets AI assistants (Claude on the web, mobile and Desktop, ChatGPT, Claude Code, Cursor…)
 help shop managers with day-to-day work: catalog, stock, prices, orders, customers, carts and
 vouchers; diagnostics such as *"why can't this customer add product Y to the cart?"*; and
 explaining how any installed module works.
@@ -22,10 +22,11 @@ explaining how any installed module works.
 ## Install
 
 1. Copy the repository into `modules/ppmcp/` (the directory name must be `ppmcp`) or upload a zip.
-2. Install **PrestaPro MCP Server** in the Module Manager.
-3. **PrestaPro MCP → API keys → Add**: choose the employee the assistant acts as and the scopes.
-   Copy the token (shown once).
-4. Connect your client — see [docs/CONNECTING.md](docs/CONNECTING.md). Claude Code:
+2. Install **PrestaShop MCP - easy connect with AI** in the Module Manager.
+3. **Claude (web, mobile, Desktop) or ChatGPT**: add the shop's endpoint URL as a custom connector.
+   The app shows a code; approve it in the module's **Approve connection** tab (OAuth, no key to copy).
+4. **Claude Code, Cursor, scripts**: create a key on the module's **API keys** tab (choose the employee
+   the assistant acts as and the scopes; the token is shown once) — see [docs/CONNECTING.md](docs/CONNECTING.md). Claude Code:
 
    ```bash
    claude mcp add --transport http prestashop https://your-shop.tld/module/ppmcp/server \
@@ -34,12 +35,15 @@ explaining how any installed module works.
 
 ## Back office
 
-| page | what |
+No sidebar entry: open the module from **Module Manager → Configure**; its pages are tabs at the top.
+
+| tab | what |
 |---|---|
-| Module **Configure** | enable/disable server, read-only mode, logging options, retention, allowed origins, endpoint URLs and copy-paste client configs |
-| **PrestaPro MCP → API keys** | create / disable / delete keys; scopes, shops, expiry, last use |
-| **PrestaPro MCP → Activity log** | every MCP request; detail view with arguments, result and changes (before → after) |
-| **PrestaPro MCP → Tools & skills** | all tools grouped by owner (core / modules), enable or disable each, provider errors, skills |
+| **Settings** | enable/disable server, read-only mode, OAuth sign-in and redirect hosts, logging options, retention, allowed origins, endpoint URLs and copy-paste client configs |
+| **Approve connection** | enter the code an AI app shows, choose employee / scopes / shops / lifetime, approve or decline |
+| **API keys** | create / disable / delete keys (manual and OAuth); scopes, shops, expiry, last use |
+| **Activity log** | every MCP request; detail view with arguments, result and changes (before → after) |
+| **Tools & skills** | all tools grouped by owner (core / modules), enable or disable each, provider errors, skills |
 
 ## Tools
 

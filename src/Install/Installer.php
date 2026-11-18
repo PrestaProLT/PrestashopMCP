@@ -6,6 +6,7 @@
 
 namespace PrestaPro\PpMcp\Install;
 
+use PrestaPro\PpMcp\OAuth\OAuthServer;
 use PrestaPro\PpMcp\Tool\ToolRegistry;
 
 /**
@@ -18,6 +19,7 @@ class Installer
 
     /** class => [name, icon] — children of the module's own menu section */
     const TABS = [
+        'AdminPpMcpConnect' => ['Approve connection', 'link'],
         'AdminPpMcpKeys' => ['API keys', 'vpn_key'],
         'AdminPpMcpLogs' => ['Activity log', 'history'],
         'AdminPpMcpTools' => ['Tools & skills', 'build'],
@@ -33,7 +35,13 @@ class Installer
         'PPMCP_DISABLED_TOOLS' => '[]',
         'PPMCP_MAX_FILE_BYTES' => 200000,
         'PPMCP_LAST_PURGE' => '',
+        'PPMCP_OAUTH_ENABLED' => 1,
+        'PPMCP_OAUTH_REDIRECT_HOSTS' => OAuthServer::DEFAULT_REDIRECT_HOSTS,
+        'PPMCP_OAUTH_ACCESS_TTL' => 3600,
     ];
+
+    /** hooks the module implements */
+    const HOOKS = ['moduleRoutes'];
 
     /** @var \Module */
     private $module;
@@ -51,7 +59,47 @@ class Installer
             $this->module->id = (int) \Module::getModuleIdByName($this->module->name);
         }
 
-        return $this->tables() && $this->config($resetConfig) && $this->providerHook() && $this->tabs();
+        return $this->tables() && $this->columns() && $this->config($resetConfig) && $this->providerHook() && $this->hooks() && $this->tabs();
+    }
+
+    public function hooks(): bool
+    {
+        foreach (self::HOOKS as $hook) {
+            if (!$this->module->isRegisteredInHook($hook) && !$this->module->registerHook($hook)) {
+                $this->errors[] = 'Could not register hook ' . $hook;
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Columns added after 1.0 (idempotent ALTERs).
+     */
+    public function columns(): bool
+    {
+        $p = _DB_PREFIX_;
+        $add = [
+            'ppmcp_key' => [
+                'oauth_client' => "ADD `oauth_client` VARCHAR(64) NULL DEFAULT NULL, ADD KEY `oauth_client` (`oauth_client`)",
+                'refresh_hash' => "ADD `refresh_hash` CHAR(64) NULL DEFAULT NULL, ADD UNIQUE KEY `refresh_hash` (`refresh_hash`)",
+                'token_expire' => 'ADD `token_expire` DATETIME NULL DEFAULT NULL',
+            ],
+        ];
+        foreach ($add as $table => $cols) {
+            $existing = array_column(\Db::getInstance()->executeS('SHOW COLUMNS FROM `' . $p . $table . '`') ?: [], 'Field');
+            foreach ($cols as $col => $ddl) {
+                if (!in_array($col, $existing, true) && !\Db::getInstance()->execute('ALTER TABLE `' . $p . $table . '` ' . $ddl)) {
+                    $this->errors[] = 'SQL error: ' . \Db::getInstance()->getMsgError();
+
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public function tables(): bool
@@ -107,6 +155,48 @@ class Installer
                 KEY `id_ppmcp_key` (`id_ppmcp_key`),
                 KEY `request_id` (`request_id`)
             ) ENGINE={$engine} DEFAULT CHARSET=utf8mb4",
+            "CREATE TABLE IF NOT EXISTS `{$p}ppmcp_oauth_client` (
+                `id_ppmcp_oauth_client` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `client_id` VARCHAR(64) NOT NULL,
+                `secret_hash` CHAR(64) NULL DEFAULT NULL,
+                `auth_method` VARCHAR(32) NOT NULL DEFAULT 'none',
+                `client_name` VARCHAR(128) NOT NULL DEFAULT '',
+                `redirect_uris` TEXT NOT NULL,
+                `ip` VARCHAR(45) NOT NULL DEFAULT '',
+                `date_add` DATETIME NOT NULL,
+                `last_used` DATETIME NULL DEFAULT NULL,
+                PRIMARY KEY (`id_ppmcp_oauth_client`),
+                UNIQUE KEY `client_id` (`client_id`),
+                KEY `ip_date` (`ip`, `date_add`)
+            ) ENGINE={$engine} DEFAULT CHARSET=utf8mb4",
+            "CREATE TABLE IF NOT EXISTS `{$p}ppmcp_oauth_request` (
+                `id_ppmcp_oauth_request` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `request_key` CHAR(32) NOT NULL,
+                `browser_hash` CHAR(64) NOT NULL,
+                `user_code` CHAR(9) NOT NULL,
+                `client_id` VARCHAR(64) NOT NULL,
+                `redirect_uri` TEXT NOT NULL,
+                `state` TEXT NULL,
+                `code_challenge` VARCHAR(128) NOT NULL,
+                `scope` VARCHAR(255) NOT NULL DEFAULT '',
+                `resource` VARCHAR(500) NOT NULL DEFAULT '',
+                `issuer` VARCHAR(255) NOT NULL DEFAULT '',
+                `id_shop` INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                `ip` VARCHAR(45) NOT NULL DEFAULT '',
+                `user_agent` VARCHAR(255) NOT NULL DEFAULT '',
+                `status` VARCHAR(16) NOT NULL DEFAULT 'pending',
+                `id_employee` INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                `id_ppmcp_key` INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                `code_hash` CHAR(64) NULL DEFAULT NULL,
+                `code_expire` DATETIME NULL DEFAULT NULL,
+                `date_add` DATETIME NOT NULL,
+                `date_expire` DATETIME NOT NULL,
+                PRIMARY KEY (`id_ppmcp_oauth_request`),
+                UNIQUE KEY `request_key` (`request_key`),
+                UNIQUE KEY `code_hash` (`code_hash`),
+                KEY `user_code` (`user_code`, `status`),
+                KEY `ip_status` (`ip`, `status`)
+            ) ENGINE={$engine} DEFAULT CHARSET=utf8mb4",
         ];
         foreach ($sql as $q) {
             if (!\Db::getInstance()->execute($q)) {
@@ -152,21 +242,15 @@ class Installer
     }
 
     /**
-     * Self-contained menu: one "PrestaPro MCP" section owning all pages.
-     * Existing tabs are re-parented (repairs earlier installs).
+     * No sidebar entry: the module is opened from the Module Manager
+     * (Configure) and its pages link to each other with a tab bar. The admin
+     * controllers are registered as hidden tabs (id_parent -1) so they stay
+     * reachable and keep per-profile permissions. Earlier versions created a
+     * "PrestaPro MCP" sidebar section: it is removed here.
      */
     public function tabs(): bool
     {
-        $idParent = (int) \Tab::getIdFromClassName(self::PARENT_TAB);
-        if ($idParent <= 0) {
-            $parent = $this->newTab(self::PARENT_TAB, 'PrestaPro MCP', 0, 'hub');
-            if (!$parent->add()) {
-                $this->errors[] = 'Could not create admin tab ' . self::PARENT_TAB;
-
-                return false;
-            }
-            $idParent = (int) $parent->id;
-        }
+        $idParent = -1;
         foreach (self::TABS as $class => $def) {
             $existing = (int) \Tab::getIdFromClassName($class);
             if ($existing > 0) {
@@ -183,6 +267,11 @@ class Installer
 
                 return false;
             }
+        }
+        $oldParent = (int) \Tab::getIdFromClassName(self::PARENT_TAB);
+        if ($oldParent > 0) {
+            $tab = new \Tab($oldParent);
+            $tab->delete();
         }
 
         return true;

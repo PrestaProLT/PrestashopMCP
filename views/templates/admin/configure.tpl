@@ -6,11 +6,6 @@
 <div class="panel ppmcp-panel">
   <div class="panel-heading"><i class="icon-link"></i> {l s='Connect an AI assistant' d='Modules.Ppmcp.Admin'} <span class="badge">v{$ppmcp_version|escape:'htmlall':'UTF-8'} · PrestaShop {$ppmcp_ps_version|escape:'htmlall':'UTF-8'}</span></div>
 
-  <p>
-    <a class="btn btn-primary" href="{$ppmcp_keys_url|escape:'htmlall':'UTF-8'}"><i class="icon-key"></i> {l s='1. Create an API key' d='Modules.Ppmcp.Admin'}</a>
-    <a class="btn btn-default" href="{$ppmcp_tools_url|escape:'htmlall':'UTF-8'}"><i class="icon-wrench"></i> {l s='Tools & skills' d='Modules.Ppmcp.Admin'}</a>
-    <a class="btn btn-default" href="{$ppmcp_logs_url|escape:'htmlall':'UTF-8'}"><i class="icon-time"></i> {l s='Activity log' d='Modules.Ppmcp.Admin'}</a>
-  </p>
 
   <h4>{l s='MCP endpoint (Streamable HTTP)' d='Modules.Ppmcp.Admin'}</h4>
   {if $ppmcp_endpoints|count > 1}
@@ -33,6 +28,22 @@
       <pre>CGIPassAuth On</pre>
     </div>
   {/if}
+
+  <h4>{l s='Claude (web, mobile, Desktop) and ChatGPT: sign in with OAuth' d='Modules.Ppmcp.Admin'}</h4>
+  {if $ppmcp_oauth_enabled}
+    <ol>
+      <li>{l s='Claude: claude.ai > Settings > Connectors > Add custom connector. ChatGPT: Settings > Apps & Connectors > Create (developer mode). Paste the server URL above, leave client ID/secret empty.' d='Modules.Ppmcp.Admin'}</li>
+      <li>{l s='The app opens a page of this shop showing a code. Enter it on' d='Modules.Ppmcp.Admin'} <a href="{$ppmcp_connect_url|escape:'htmlall':'UTF-8'}">{l s='Approve connection' d='Modules.Ppmcp.Admin'}</a>, {l s='choose the employee, scopes and lifetime, and approve.' d='Modules.Ppmcp.Admin'}</li>
+      <li>{l s='Connectors added on claude.ai also work in the Claude mobile app and Claude Desktop.' d='Modules.Ppmcp.Admin'}</li>
+    </ol>
+  {elseif !$ppmcp_oauth_on}
+    <p class="text-muted">{l s='OAuth sign-in is off (see the settings below).' d='Modules.Ppmcp.Admin'}</p>
+  {else}
+    <div class="alert alert-warning">{l s='OAuth sign-in needs friendly URLs (Shop Parameters > Traffic & SEO > Friendly URL). Until then, use an API key.' d='Modules.Ppmcp.Admin'}</div>
+  {/if}
+
+  <h4>{l s='Other clients: API key' d='Modules.Ppmcp.Admin'}</h4>
+  <p>{l s='Create a key on the API keys tab and send it as "Authorization: Bearer <key>".' d='Modules.Ppmcp.Admin'}</p>
 
   <h4>Claude Code</h4>
   <pre>claude mcp add --transport http prestashop {$ppmcp_endpoint|escape:'htmlall':'UTF-8'} --header "Authorization: Bearer ppmcp_YOUR_KEY"</pre>

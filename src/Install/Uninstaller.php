@@ -15,7 +15,7 @@ class Uninstaller
     public static function run(): bool
     {
         $ok = true;
-        foreach (['ppmcp_key', 'ppmcp_log', 'ppmcp_session'] as $table) {
+        foreach (['ppmcp_key', 'ppmcp_log', 'ppmcp_session', 'ppmcp_oauth_client', 'ppmcp_oauth_request'] as $table) {
             $ok = \Db::getInstance()->execute('DROP TABLE IF EXISTS `' . _DB_PREFIX_ . $table . '`') && $ok;
         }
         foreach (array_keys(Installer::DEFAULT_CONFIG) as $key) {

@@ -31,8 +31,9 @@ class AdminPpMcpKeysController extends ModuleAdminController
 
         parent::__construct();
 
-        $this->_select = 'CONCAT(e.`firstname`, " ", e.`lastname`, " <", e.`email`, ">") AS `employee_name`';
-        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'employee` e ON (e.`id_employee` = a.`id_employee`)';
+        $this->_select = 'CONCAT(e.`firstname`, " ", e.`lastname`, " <", e.`email`, ">") AS `employee_name`, oc.`client_name` AS `oauth_client_name`';
+        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'employee` e ON (e.`id_employee` = a.`id_employee`)
+            LEFT JOIN `' . _DB_PREFIX_ . 'ppmcp_oauth_client` oc ON (oc.`client_id` = a.`oauth_client`)';
         if (!$this->isSuperAdmin()) {
             $this->_where = ' AND a.`id_employee` = ' . (int) $this->context->employee->id;
         }
@@ -43,6 +44,7 @@ class AdminPpMcpKeysController extends ModuleAdminController
             'token_hint' => ['title' => $this->trans('Token starts with', [], 'Modules.Ppmcp.Admin'), 'search' => false, 'callback' => 'renderHint'],
             'employee_name' => ['title' => $this->trans('Acts as employee', [], 'Modules.Ppmcp.Admin'), 'havingFilter' => true],
             'scopes' => ['title' => $this->trans('Scopes', [], 'Modules.Ppmcp.Admin')],
+            'oauth_client_name' => ['title' => $this->trans('Connected via', [], 'Modules.Ppmcp.Admin'), 'havingFilter' => true, 'callback' => 'renderVia'],
             'shops' => ['title' => $this->trans('Shops', [], 'Modules.Ppmcp.Admin'), 'callback' => 'renderShops', 'search' => false],
             'last_used' => ['title' => $this->trans('Last used', [], 'Modules.Ppmcp.Admin'), 'type' => 'datetime'],
             'last_ip' => ['title' => $this->trans('Last IP', [], 'Modules.Ppmcp.Admin')],
@@ -70,6 +72,15 @@ class AdminPpMcpKeysController extends ModuleAdminController
         return '<code>' . htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8') . '…</code>';
     }
 
+    public function renderVia($value, $row)
+    {
+        if (empty($row['oauth_client'])) {
+            return $this->trans('API key', [], 'Modules.Ppmcp.Admin');
+        }
+
+        return 'OAuth: ' . htmlspecialchars((string) ($value ?: $row['oauth_client']), ENT_QUOTES, 'UTF-8');
+    }
+
     public function renderShops($value)
     {
         return $value === '' || $value === null ? $this->trans('All', [], 'Admin.Global') : htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -77,6 +88,7 @@ class AdminPpMcpKeysController extends ModuleAdminController
 
     public function initContent()
     {
+        $this->content = $this->module->renderNav('AdminPpMcpKeys') . $this->content;
         $newToken = isset($this->context->cookie->ppmcp_new_token) ? (string) $this->context->cookie->ppmcp_new_token : '';
         if ($newToken !== '') {
             unset($this->context->cookie->ppmcp_new_token);

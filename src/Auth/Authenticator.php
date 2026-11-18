@@ -18,6 +18,8 @@ class Authenticator
 {
     /** @var string reason of the last failure, for the activity log */
     public $failure = '';
+    /** @var bool true when an OAuth access token expired (client should refresh) */
+    public $tokenExpired = false;
 
     public static function tokenFromHeaders(array $headers): string
     {
@@ -64,6 +66,12 @@ class Authenticator
         $key = \PpMcpApiKey::findByToken($token);
         if (!$key) {
             $this->failure = 'unknown token';
+
+            return null;
+        }
+        if ($key->active && $key->isAccessTokenExpired()) {
+            $this->failure = 'access token expired';
+            $this->tokenExpired = true;
 
             return null;
         }

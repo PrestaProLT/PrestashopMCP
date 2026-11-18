@@ -9,6 +9,7 @@ namespace PrestaPro\PpMcp\Mcp;
 use PrestaPro\PpMcp\Auth\Authenticator;
 use PrestaPro\PpMcp\Auth\PermissionChecker;
 use PrestaPro\PpMcp\Log\ActionLogger;
+use PrestaPro\PpMcp\OAuth\OAuthServer;
 use PrestaPro\PpMcp\Skill\SkillRepository;
 use PrestaPro\PpMcp\Tool\ToolRegistry;
 use PrestaPro\PpMcp\Tool\ToolRunner;
@@ -73,14 +74,24 @@ class Endpoint
         }
 
         $auth = new Authenticator();
-        $identity = $auth->authenticate(Authenticator::tokenFromHeaders($headers));
+        $token = Authenticator::tokenFromHeaders($headers);
+        $identity = $auth->authenticate($token);
         if (!$identity) {
             $decoded = Json::decode($body);
+            // RFC 9728 / MCP authorization: tell OAuth clients where to sign in.
+            $challenge = 'Bearer realm="PrestaPro MCP"';
+            $metadataUrl = OAuthServer::resourceMetadataUrl();
+            if ($metadataUrl) {
+                $challenge .= ', resource_metadata="' . $metadataUrl . '"';
+            }
+            if ($token !== '') {
+                $challenge .= ', error="invalid_token", error_description="' . ($auth->tokenExpired ? 'The access token expired' : 'The access token is not valid') . '"';
+            }
             if (ActionLogger::authFailureThrottled($ip)) {
                 return HttpResponse::json(
                     401,
                     ['jsonrpc' => '2.0', 'id' => null, 'error' => ['code' => -32001, 'message' => 'Unauthorized']],
-                    ['WWW-Authenticate' => 'Bearer realm="PrestaPro MCP"']
+                    ['WWW-Authenticate' => $challenge]
                 );
             }
             ActionLogger::log([
@@ -95,8 +106,8 @@ class Endpoint
 
             return HttpResponse::json(
                 401,
-                ['jsonrpc' => '2.0', 'id' => null, 'error' => ['code' => -32001, 'message' => 'Unauthorized: send "Authorization: Bearer <ppmcp_ token>" (or X-Api-Key). Create keys in the PrestaPro MCP module.']],
-                ['WWW-Authenticate' => 'Bearer realm="PrestaPro MCP"']
+                ['jsonrpc' => '2.0', 'id' => null, 'error' => ['code' => -32001, 'message' => 'Unauthorized: sign in with OAuth, or send "Authorization: Bearer <ppmcp_ token>" (or X-Api-Key). Create keys in the PrestaPro MCP module.']],
+                ['WWW-Authenticate' => $challenge]
             );
         }
         list($key, $employee) = $identity;

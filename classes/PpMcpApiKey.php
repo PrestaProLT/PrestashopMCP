@@ -33,6 +33,12 @@ class PpMcpApiKey extends ObjectModel
     public $date_expire;
     /** @var string|null */
     public $last_used;
+    /** @var string|null OAuth client_id when the key was issued through OAuth */
+    public $oauth_client;
+    /** @var string|null SHA-256 of the current OAuth refresh token */
+    public $refresh_hash;
+    /** @var string|null OAuth access token expiry (the key itself may live longer) */
+    public $token_expire;
     /** @var string */
     public $last_ip = '';
     /** @var string */
@@ -54,6 +60,9 @@ class PpMcpApiKey extends ObjectModel
             'date_expire' => ['type' => self::TYPE_DATE, 'validate' => 'isDateFormat', 'allow_null' => true],
             'last_used' => ['type' => self::TYPE_DATE, 'validate' => 'isDateFormat', 'allow_null' => true],
             'last_ip' => ['type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 45],
+            'oauth_client' => ['type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 64, 'allow_null' => true],
+            'refresh_hash' => ['type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 64, 'allow_null' => true],
+            'token_expire' => ['type' => self::TYPE_DATE, 'validate' => 'isDateFormat', 'allow_null' => true],
             'date_add' => ['type' => self::TYPE_DATE, 'validate' => 'isDate'],
             'date_upd' => ['type' => self::TYPE_DATE, 'validate' => 'isDate'],
         ],
@@ -75,7 +84,7 @@ class PpMcpApiKey extends ObjectModel
 
     private function normaliseDates()
     {
-        foreach (['date_expire', 'last_used'] as $f) {
+        foreach (['date_expire', 'last_used', 'token_expire'] as $f) {
             if (empty($this->{$f}) || strpos((string) $this->{$f}, '0000-00-00') === 0) {
                 $this->{$f} = null;
             }
@@ -109,7 +118,8 @@ class PpMcpApiKey extends ObjectModel
         }
         $hash = self::hashToken($token);
         $id = (int) Db::getInstance()->getValue(
-            'SELECT `id_ppmcp_key` FROM `' . _DB_PREFIX_ . 'ppmcp_key` WHERE `token_hash` = \'' . pSQL($hash) . '\''
+            'SELECT `id_ppmcp_key` FROM `' . _DB_PREFIX_ . 'ppmcp_key` WHERE `token_hash` = \'' . pSQL($hash) . '\'',
+            false
         );
         if (!$id) {
             return null;
@@ -131,7 +141,15 @@ class PpMcpApiKey extends ObjectModel
             return false;
         }
 
-        return true;
+        return !$this->isAccessTokenExpired();
+    }
+
+    /**
+     * OAuth keys: the access token is short-lived and renewed with the refresh token.
+     */
+    public function isAccessTokenExpired(): bool
+    {
+        return $this->token_expire && $this->token_expire !== '0000-00-00 00:00:00' && strtotime($this->token_expire) < time();
     }
 
     /**

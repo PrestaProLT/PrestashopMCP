@@ -1,6 +1,6 @@
 <?php
 /**
- * PrestaPro MCP Server — Model Context Protocol server for PrestaShop 1.7 / 8 / 9.
+ * PrestaShop MCP - easy connect with AI — Model Context Protocol server for PrestaShop 1.7 / 8 / 9.
  *
  * Lets AI assistants (Claude Code, Claude Desktop, claude.ai connectors,
  * Cursor…) help shop managers with catalog, orders, customers, carts,
@@ -20,6 +20,7 @@ require_once __DIR__ . '/autoload.php';
 use PrestaPro\PpMcp\Install\Installer;
 use PrestaPro\PpMcp\Install\Uninstaller;
 use PrestaPro\PpMcp\Log\ActionLogger;
+use PrestaPro\PpMcp\OAuth\OAuthServer;
 
 class PpMcp extends Module
 {
@@ -29,7 +30,7 @@ class PpMcp extends Module
     {
         $this->name = 'ppmcp';
         $this->tab = 'administration';
-        $this->version = '1.2.1';
+        $this->version = '1.3.0';
         $this->author = 'PrestaPro';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -37,7 +38,7 @@ class PpMcp extends Module
 
         parent::__construct();
 
-        $this->displayName = $this->trans('PrestaPro MCP Server', [], self::TRANSLATION_DOMAIN);
+        $this->displayName = $this->trans('PrestaShop MCP - easy connect with AI', [], self::TRANSLATION_DOMAIN);
         $this->description = $this->trans('Model Context Protocol (MCP) server for shop managers: catalog, orders, customers, diagnostics and module insight for AI assistants.', [], self::TRANSLATION_DOMAIN);
         $this->confirmUninstall = $this->trans('Uninstalling permanently deletes all MCP API keys and the full MCP activity log. AI assistants will lose access immediately. This cannot be undone.', [], self::TRANSLATION_DOMAIN);
     }
@@ -83,6 +84,44 @@ class PpMcp extends Module
     }
 
     /**
+     * Tab bar shown on top of every page of the module. The module has no
+     * sidebar entry: it is opened from the Module Manager (Configure).
+     *
+     * @param string $current controller class name, or 'settings'
+     */
+    public function renderNav(string $current): string
+    {
+        $link = $this->context->link;
+        $items = [
+            'settings' => [$this->trans('Settings', [], self::TRANSLATION_DOMAIN), 'icon-cogs', $link->getAdminLink('AdminModules') . '&configure=' . $this->name],
+            'AdminPpMcpConnect' => [$this->trans('Approve connection', [], self::TRANSLATION_DOMAIN), 'icon-link', null],
+            'AdminPpMcpKeys' => [$this->trans('API keys', [], self::TRANSLATION_DOMAIN), 'icon-key', null],
+            'AdminPpMcpLogs' => [$this->trans('Activity log', [], self::TRANSLATION_DOMAIN), 'icon-time', null],
+            'AdminPpMcpTools' => [$this->trans('Tools & skills', [], self::TRANSLATION_DOMAIN), 'icon-wrench', null],
+        ];
+        $nav = [];
+        foreach ($items as $key => $item) {
+            $nav[] = [
+                'label' => $item[0],
+                'icon' => $item[1],
+                'url' => $item[2] !== null ? $item[2] : $link->getAdminLink($key),
+                'active' => $key === $current,
+            ];
+        }
+        $this->context->smarty->assign('ppmcp_nav', $nav);
+
+        return $this->context->smarty->fetch($this->getLocalPath() . 'views/templates/admin/nav.tpl');
+    }
+
+    /**
+     * OAuth discovery documents under /.well-known/ (friendly URLs only).
+     */
+    public function hookModuleRoutes($params)
+    {
+        return Configuration::getGlobalValue('PPMCP_OAUTH_ENABLED') ? OAuthServer::routes() : [];
+    }
+
+    /**
      * MCP endpoint URL for the current shop (friendly URL when enabled).
      */
     public function getEndpointUrl(?int $idShop = null): string
@@ -102,6 +141,10 @@ class PpMcp extends Module
             Configuration::updateGlobalValue('PPMCP_MAX_FILE_BYTES', max(10000, min(2000000, (int) Tools::getValue('PPMCP_MAX_FILE_BYTES'))));
             $origins = trim(preg_replace('/[^a-z0-9:\/\.\-\s,]/i', '', (string) Tools::getValue('PPMCP_ALLOWED_ORIGINS')));
             Configuration::updateGlobalValue('PPMCP_ALLOWED_ORIGINS', $origins);
+            Configuration::updateGlobalValue('PPMCP_OAUTH_ENABLED', (int) Tools::getValue('PPMCP_OAUTH_ENABLED'));
+            $hosts = trim(preg_replace('/[^a-z0-9\.\-\*:\[\]\s,]/i', '', strtolower((string) Tools::getValue('PPMCP_OAUTH_REDIRECT_HOSTS'))));
+            Configuration::updateGlobalValue('PPMCP_OAUTH_REDIRECT_HOSTS', $hosts);
+            Configuration::updateGlobalValue('PPMCP_OAUTH_ACCESS_TTL', max(300, min(86400, (int) Tools::getValue('PPMCP_OAUTH_ACCESS_TTL'))));
             $purged = ActionLogger::purge();
             $output .= $this->displayConfirmation($this->trans('Settings updated.', [], self::TRANSLATION_DOMAIN)
                 . ($purged ? ' ' . $this->trans('%count% old log entries removed.', ['%count%' => $purged], self::TRANSLATION_DOMAIN) : ''));
@@ -116,9 +159,13 @@ class PpMcp extends Module
             'ppmcp_version' => $this->version,
             'ppmcp_ps_version' => _PS_VERSION_,
             'ppmcp_auth_header_ok' => $this->authorizationHeaderLikelyPassed(),
+            'ppmcp_oauth_enabled' => OAuthServer::enabled(),
+            'ppmcp_oauth_on' => (bool) Configuration::getGlobalValue('PPMCP_OAUTH_ENABLED'),
+            'ppmcp_friendly_urls' => (bool) Configuration::get('PS_REWRITING_SETTINGS'),
+            'ppmcp_connect_url' => $this->context->link->getAdminLink('AdminPpMcpConnect'),
         ]);
 
-        return $output
+        return $this->renderNav('settings') . $output
             . $this->context->smarty->fetch($this->getLocalPath() . 'views/templates/admin/configure.tpl')
             . $this->renderConfigForm();
     }
@@ -190,6 +237,20 @@ class PpMcp extends Module
                         'name' => 'PPMCP_MAX_FILE_BYTES',
                         'class' => 'fixed-width-md',
                     ],
+                    $switch('PPMCP_OAUTH_ENABLED', $this->trans('OAuth sign-in', [], self::TRANSLATION_DOMAIN), $this->trans('Lets Claude (web, mobile, Desktop), ChatGPT and other AI apps connect without copying a key: the app shows a code that an employee approves on PrestaPro MCP > Approve connection. Needs friendly URLs.', [], self::TRANSLATION_DOMAIN)),
+                    [
+                        'type' => 'textarea',
+                        'label' => $this->trans('OAuth redirect hosts', [], self::TRANSLATION_DOMAIN),
+                        'name' => 'PPMCP_OAUTH_REDIRECT_HOSTS',
+                        'desc' => $this->trans('Only AI apps returning to these hosts can register. One per line; *.example.com allows subdomains. Default: claude.ai, claude.com, chatgpt.com, localhost, 127.0.0.1.', [], self::TRANSLATION_DOMAIN),
+                    ],
+                    [
+                        'type' => 'text',
+                        'label' => $this->trans('OAuth access token lifetime (seconds)', [], self::TRANSLATION_DOMAIN),
+                        'name' => 'PPMCP_OAUTH_ACCESS_TTL',
+                        'class' => 'fixed-width-md',
+                        'desc' => $this->trans('The app renews it automatically with its refresh token. 300 to 86400.', [], self::TRANSLATION_DOMAIN),
+                    ],
                     [
                         'type' => 'textarea',
                         'label' => $this->trans('Extra allowed browser origins', [], self::TRANSLATION_DOMAIN),
@@ -209,7 +270,7 @@ class PpMcp extends Module
         $helper->submit_action = 'submitPpMcpConfig';
         $helper->default_form_language = (int) $this->context->language->id;
         $helper->fields_value = [];
-        foreach (['PPMCP_ENABLED', 'PPMCP_READ_ONLY', 'PPMCP_LOG_ARGUMENTS', 'PPMCP_LOG_RESULTS', 'PPMCP_LOG_RETENTION_DAYS', 'PPMCP_MAX_FILE_BYTES', 'PPMCP_ALLOWED_ORIGINS'] as $k) {
+        foreach (['PPMCP_ENABLED', 'PPMCP_READ_ONLY', 'PPMCP_LOG_ARGUMENTS', 'PPMCP_LOG_RESULTS', 'PPMCP_LOG_RETENTION_DAYS', 'PPMCP_MAX_FILE_BYTES', 'PPMCP_ALLOWED_ORIGINS', 'PPMCP_OAUTH_ENABLED', 'PPMCP_OAUTH_REDIRECT_HOSTS', 'PPMCP_OAUTH_ACCESS_TTL'] as $k) {
             $helper->fields_value[$k] = Configuration::getGlobalValue($k);
         }
 

@@ -73,6 +73,12 @@ class AdminPpMcpLogsController extends ModuleAdminController
         return (int) $this->context->employee->id_profile === (int) _PS_ADMIN_PROFILE_;
     }
 
+    public function initContent()
+    {
+        $this->content = $this->module->renderNav('AdminPpMcpLogs') . $this->content;
+        parent::initContent();
+    }
+
     public function initToolbar()
     {
         parent::initToolbar();

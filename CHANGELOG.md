@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 — 2026-11-18
+
+* **OAuth sign-in** for Claude (claude.ai, mobile apps, Desktop), ChatGPT and other MCP clients:
+  discovery (RFC 9728 / RFC 8414 under `/.well-known/`), dynamic client registration limited to
+  allowed redirect hosts, authorization code + PKCE S256, 1-hour access tokens with rotating refresh
+  tokens, revocation, code-replay protection. Approval happens in the back office with a one-time
+  code (no password form, the back-office URL is never revealed); the access becomes a normal API key.
+* New **Approve connection** page; settings: OAuth sign-in, OAuth redirect hosts, access token lifetime.
+* The module no longer has a sidebar section: it is opened from the Module Manager (Configure) and
+  its pages are tabs at the top (Settings, Approve connection, API keys, Activity log, Tools & skills).
+  Upgrading removes the old "PrestaPro MCP" menu.
+* Renamed to "PrestaShop MCP - easy connect with AI".
+* API keys list shows how each key was created (API key / OAuth app).
+
 ## 1.2.1 — 2026-11-18
 
 * `module_hook_list` (module mode) now loads the module class, so hook methods inherited from a

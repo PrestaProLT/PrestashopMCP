@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <module>
     <name>ppmcp</name>
-    <displayName><![CDATA[PrestaPro MCP Server]]></displayName>
-    <version><![CDATA[1.2.1]]></version>
+    <displayName><![CDATA[PrestaShop MCP - easy connect with AI]]></displayName>
+    <version><![CDATA[1.3.0]]></version>
     <description><![CDATA[Model Context Protocol (MCP) server for shop managers: catalog, orders, customers, diagnostics and module insight for AI assistants.]]></description>
     <author><![CDATA[PrestaPro]]></author>
     <tab><![CDATA[administration]]></tab>
