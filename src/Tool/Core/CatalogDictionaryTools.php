@@ -378,6 +378,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $id = (int) $args['id_feature'];
         $row = $this->featureRow($id, (int) $ctx->idLang, 0);
         $this->assertRecordShopsAllowed($ctx, 'feature_shop', 'id_feature', $id, sprintf('Feature #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'feature_product` WHERE `id_feature` = ' . $id, sprintf('Feature #%d', $id));
         $f = new \Feature($id);
         $names = $this->langValues($args['name'], $ctx, 'name', false);
         $this->assertNoDuplicate('feature', $names, 0, $id);
@@ -398,6 +399,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $id = (int) $args['id_feature'];
         $row = $this->featureRow($id, (int) $ctx->idLang, 0);
         $this->assertRecordShopsAllowed($ctx, 'feature_shop', 'id_feature', $id, sprintf('Feature #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'feature_product` WHERE `id_feature` = ' . $id, sprintf('Feature #%d', $id));
         $values = (int) $this->db()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'feature_value` WHERE `id_feature` = ' . $id);
         $usage = ['products' => $row['products'], 'values' => $values];
         $this->assertDeleteConfirmed($args, $ctx, $row['products'] > 0, sprintf('Feature "%s" is set on %d product(s) and has %d value(s).', $row['name'], $row['products'], $values));
@@ -415,6 +417,8 @@ class CatalogDictionaryTools extends AbstractToolGroup
     {
         $idF = (int) $args['id_feature'];
         $feature = $this->featureRow($idF, (int) $ctx->idLang, (int) $ctx->idShop);
+        // A new value is offered in every shop of the feature.
+        $this->assertRecordShopsAllowed($ctx, 'feature_shop', 'id_feature', $idF, sprintf('Feature #%d', $idF));
         $values = $this->langValues($args['value'], $ctx, 'value', true);
         $this->assertNoDuplicate('feature_value', $values, $idF, 0);
 
@@ -441,6 +445,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $fv = $this->loadPredefinedValue($id);
         $idF = (int) $fv->id_feature;
         $this->assertRecordShopsAllowed($ctx, 'feature_shop', 'id_feature', $idF, sprintf('Feature #%d', $idF));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'feature_product` WHERE `id_feature_value` = ' . $id, sprintf('Feature value #%d', $id));
         $values = $this->langValues($args['value'], $ctx, 'value', false);
         $this->assertNoDuplicate('feature_value', $values, $idF, $id);
         $this->validateObject($fv, ['value' => $values]);
@@ -461,6 +466,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $fv = $this->loadPredefinedValue($id);
         $idF = (int) $fv->id_feature;
         $this->assertRecordShopsAllowed($ctx, 'feature_shop', 'id_feature', $idF, sprintf('Feature #%d', $idF));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'feature_product` WHERE `id_feature_value` = ' . $id, sprintf('Feature value #%d', $id));
         $products = $this->featureValueProducts($id);
         $label = $this->pick($fv->value, (int) $ctx->idLang);
         $this->assertDeleteConfirmed($args, $ctx, $products > 0, sprintf('Value "%s" is set on %d product(s).', $label, $products));
@@ -583,6 +589,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $id = (int) $args['id_attribute_group'];
         $this->groupRow($id, (int) $ctx->idLang, 0);
         $this->assertRecordShopsAllowed($ctx, 'attribute_group_shop', 'id_attribute_group', $id, sprintf('Attribute #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT pa.`id_product` FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac INNER JOIN `' . _DB_PREFIX_ . 'attribute` a ON a.`id_attribute` = pac.`id_attribute` INNER JOIN `' . _DB_PREFIX_ . 'product_attribute` pa ON pa.`id_product_attribute` = pac.`id_product_attribute` WHERE a.`id_attribute_group` = ' . $id, sprintf('Attribute #%d', $id));
         if (!isset($args['name']) && !isset($args['public_name']) && !isset($args['group_type'])) {
             throw new ToolException('Nothing to do.', 'Pass name, public_name and/or group_type.');
         }
@@ -629,6 +636,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $id = (int) $args['id_attribute_group'];
         $row = $this->groupRow($id, (int) $ctx->idLang, 0);
         $this->assertRecordShopsAllowed($ctx, 'attribute_group_shop', 'id_attribute_group', $id, sprintf('Attribute #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT pa.`id_product` FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac INNER JOIN `' . _DB_PREFIX_ . 'attribute` a ON a.`id_attribute` = pac.`id_attribute` INNER JOIN `' . _DB_PREFIX_ . 'product_attribute` pa ON pa.`id_product_attribute` = pac.`id_product_attribute` WHERE a.`id_attribute_group` = ' . $id, sprintf('Attribute #%d', $id));
         $products = (int) $this->db()->getValue(
             'SELECT COUNT(DISTINCT pa.`id_product`) FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac
             INNER JOIN `' . _DB_PREFIX_ . 'attribute` a ON a.`id_attribute` = pac.`id_attribute`
@@ -696,6 +704,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $a = $this->loadAttributeValue($id);
         $idG = (int) $a->id_attribute_group;
         $this->assertRecordShopsAllowed($ctx, 'attribute_shop', 'id_attribute', $id, sprintf('Attribute value #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT pa.`id_product` FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac INNER JOIN `' . _DB_PREFIX_ . 'product_attribute` pa ON pa.`id_product_attribute` = pac.`id_product_attribute` WHERE pac.`id_attribute` = ' . $id, sprintf('Attribute value #%d', $id));
         if (!isset($args['name']) && !isset($args['color'])) {
             throw new ToolException('Nothing to do.', 'Pass name and/or color.');
         }
@@ -729,6 +738,7 @@ class CatalogDictionaryTools extends AbstractToolGroup
         $id = (int) $args['id_attribute'];
         $a = $this->loadAttributeValue($id);
         $this->assertRecordShopsAllowed($ctx, 'attribute_shop', 'id_attribute', $id, sprintf('Attribute value #%d', $id));
+        $this->assertAffectedProductsAllowed($ctx, 'SELECT pa.`id_product` FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac INNER JOIN `' . _DB_PREFIX_ . 'product_attribute` pa ON pa.`id_product_attribute` = pac.`id_product_attribute` WHERE pac.`id_attribute` = ' . $id, sprintf('Attribute value #%d', $id));
         $combinations = $this->attributeCombinations($id);
         $products = (int) $this->db()->getValue(
             'SELECT COUNT(DISTINCT pa.`id_product`) FROM `' . _DB_PREFIX_ . 'product_attribute_combination` pac
@@ -920,8 +930,34 @@ class CatalogDictionaryTools extends AbstractToolGroup
      */
     private function assertRecordShopsAllowed(ExecutionContext $ctx, string $table, string $col, int $id, string $what): void
     {
-        foreach ($this->recordShops($table, $col, $id) as $idShop) {
+        $shops = $this->recordShops($table, $col, $id);
+        if (!$shops) {
+            // Not linked to any shop: only an unrestricted key may touch it (fail closed).
+            $this->assertAllShopsAllowed($ctx, $what . ' (not linked to any shop)');
+        }
+        foreach ($shops as $idShop) {
             $this->assertShopAllowed($ctx, $idShop, $what . ' (shared by all its shops)');
+        }
+    }
+
+    /**
+     * Renaming or deleting a record changes every product using it: a
+     * shop-restricted key must be allowed in every shop of those products.
+     *
+     * @param string $productIdSql subquery returning id_product
+     *
+     * @throws \PrestaPro\PpMcp\Tool\PermissionDeniedException
+     */
+    private function assertAffectedProductsAllowed(ExecutionContext $ctx, string $productIdSql, string $what): void
+    {
+        if (!$ctx->apiKey->getShopIds()) {
+            return;
+        }
+        $rows = $this->db()->executeS(
+            'SELECT DISTINCT ps.`id_shop` FROM `' . _DB_PREFIX_ . 'product_shop` ps WHERE ps.`id_product` IN (' . $productIdSql . ')'
+        ) ?: [];
+        foreach ($rows as $r) {
+            $this->assertShopAllowed($ctx, (int) $r['id_shop'], $what . ' (used by products of that shop)');
         }
     }
 
