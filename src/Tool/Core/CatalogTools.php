@@ -168,6 +168,36 @@ class CatalogTools extends AbstractToolGroup
                 'handler' => 'stockSet',
             ],
             [
+                'name' => 'catalog_feature_list',
+                'title' => 'List product features',
+                'description' => 'Lists the predefined product features of the shop (Catalog > Attributes & Features > Features). Without id_feature: features with their number of predefined values and of products using them. With id_feature: the predefined values of that feature (id_feature_value), filterable by value text. Only predefined values are listed; custom (per-product free text) values are never offered. Use the ids with catalog_product_feature_set.',
+                'params' => array_merge([
+                    'id_feature' => ['type' => 'integer', 'minimum' => 1, 'description' => 'List the predefined values of this feature.'],
+                    'query' => ['type' => 'string', 'description' => 'Part of the feature name (or of the value text when id_feature is given).'],
+                ], self::paginationParams(50, 200)),
+                'shop' => true,
+                'lang' => true,
+                'permission' => ['AdminProducts', 'view'],
+                'keywords' => ['feature', 'features', 'characteristic', 'specification', 'property', 'value'],
+                'handler' => 'featureList',
+            ],
+            [
+                'name' => 'catalog_product_feature_set',
+                'title' => 'Set product features',
+                'description' => 'Assigns predefined feature values to a product, and/or removes features from it. Only predefined values (catalog_feature_list) are accepted: custom free-text values and new features or values are refused, so the feature dictionary stays clean. Each value id implies its feature; by default the values given for a feature replace that feature\'s current values on the product (mode=add keeps them). Features not mentioned are left unchanged. Product features are shared by all shops of the product.',
+                'params' => [
+                    'id_product' => self::idParam('Product id.'),
+                    'values' => ['type' => 'array', 'items' => ['type' => 'integer', 'minimum' => 1], 'maxItems' => 100, 'description' => 'Predefined id_feature_value ids to assign (catalog_feature_list with id_feature).'],
+                    'remove_features' => ['type' => 'array', 'items' => ['type' => 'integer', 'minimum' => 1], 'maxItems' => 100, 'description' => 'id_feature ids to remove completely from the product.'],
+                    'mode' => ['type' => 'string', 'enum' => ['replace', 'add'], 'default' => 'replace', 'description' => 'replace = the given values become the only values of their feature; add = keep the current values of that feature and add the given ones.'],
+                ],
+                'write' => true,
+                'shop' => true,
+                'permission' => ['AdminProducts', 'edit'],
+                'keywords' => ['feature', 'features', 'characteristic', 'specification', 'property', 'assign'],
+                'handler' => 'productFeatureSet',
+            ],
+            [
                 'name' => 'catalog_combination_list',
                 'title' => 'List product combinations',
                 'description' => 'Lists the combinations (variants such as size/color) of a product in the shop: attribute names in the current language, reference, EAN13, price impact (tax excl), final price tax incl, quantity, minimal quantity, default flag. Use the id_product_attribute with catalog_stock_set or catalog_price_explain.',
@@ -498,10 +528,7 @@ class CatalogTools extends AbstractToolGroup
         }
         $imageTotal = (int) $this->db()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'image_shop` WHERE `id_product` = ' . $id . ' AND `id_shop` = ' . $s);
 
-        $features = [];
-        foreach (array_slice(\Product::getFrontFeaturesStatic($l, $id) ?: [], 0, 50) as $f) {
-            $features[] = ['name' => (string) $f['name'], 'value' => (string) $f['value']];
-        }
+        $features = array_slice($this->formatProductFeatures($this->productFeatureRows($id, $l)), 0, 50);
 
         $shops = [];
         $shopNames = [];
@@ -807,6 +834,383 @@ class CatalogTools extends AbstractToolGroup
             'out_of_stock' => $oosAfter,
             'orders_when_out_of_stock' => \Product::isAvailableWhenOutOfStock($oosAfter) ? 'allowed' : 'denied',
         ];
+    }
+
+    // ------------------------------------------------------------------
+    // Features (predefined values only)
+    // ------------------------------------------------------------------
+
+    public function featureList(array $args, ExecutionContext $ctx): array
+    {
+        $s = (int) $ctx->idShop;
+        $l = (int) $ctx->idLang;
+        $q = isset($args['query']) ? trim((string) $args['query']) : '';
+        $warnings = [];
+        if (!$this->conf('PS_FEATURE_FEATURE_ACTIVE', $s) && \Configuration::hasKey('PS_FEATURE_FEATURE_ACTIVE')) {
+            $warnings[] = 'Features are disabled in this shop (PS_FEATURE_FEATURE_ACTIVE=0); they are not shown on the storefront.';
+        }
+
+        if (!empty($args['id_feature'])) {
+            $idF = (int) $args['id_feature'];
+            $feature = $this->featureRow($idF, $s, $l);
+            $where = 'fv.`id_feature` = ' . $idF . ' AND ' . self::predefinedSql('fv');
+            if ($q !== '') {
+                $where .= ' AND fvl.`value` LIKE \'%' . self::likeValue($q) . '%\'';
+            }
+            $from = ' FROM `' . _DB_PREFIX_ . 'feature_value` fv
+                LEFT JOIN `' . _DB_PREFIX_ . 'feature_value_lang` fvl ON fvl.`id_feature_value` = fv.`id_feature_value` AND fvl.`id_lang` = ' . $l . '
+                WHERE ' . $where;
+            $total = (int) $this->db()->getValue('SELECT COUNT(*)' . $from);
+            $rows = $this->db()->executeS(
+                'SELECT fv.`id_feature_value`, fvl.`value`,
+                    (SELECT COUNT(DISTINCT fp.`id_product`) FROM `' . _DB_PREFIX_ . 'feature_product` fp WHERE fp.`id_feature_value` = fv.`id_feature_value`) AS products'
+                . $from . ' ORDER BY fvl.`value` LIMIT ' . (int) $args['offset'] . ', ' . (int) $args['limit']
+            ) ?: [];
+            $items = [];
+            foreach ($rows as $r) {
+                $items[] = [
+                    'id_feature_value' => (int) $r['id_feature_value'],
+                    'value' => (string) $r['value'],
+                    'products' => (int) $r['products'],
+                ];
+            }
+            $out = $this->paged($items, $total, $args, 'values');
+            $out['feature'] = $feature;
+            $out['_warnings'] = $warnings;
+
+            return $out;
+        }
+
+        $where = '1';
+        if ($q !== '') {
+            $where = 'fl.`name` LIKE \'%' . self::likeValue($q) . '%\'';
+        }
+        $from = ' FROM `' . _DB_PREFIX_ . 'feature` f
+            INNER JOIN `' . _DB_PREFIX_ . 'feature_shop` fs ON fs.`id_feature` = f.`id_feature` AND fs.`id_shop` = ' . $s . '
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = f.`id_feature` AND fl.`id_lang` = ' . $l . '
+            WHERE ' . $where;
+        $total = (int) $this->db()->getValue('SELECT COUNT(*)' . $from);
+        $rows = $this->db()->executeS(
+            'SELECT f.`id_feature`, f.`position`, fl.`name`,
+                (SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'feature_value` fv WHERE fv.`id_feature` = f.`id_feature` AND ' . self::predefinedSql('fv') . ') AS predefined_values,
+                (SELECT COUNT(DISTINCT fp.`id_product`) FROM `' . _DB_PREFIX_ . 'feature_product` fp WHERE fp.`id_feature` = f.`id_feature`) AS products'
+            . $from . ' ORDER BY f.`position`, fl.`name` LIMIT ' . (int) $args['offset'] . ', ' . (int) $args['limit']
+        ) ?: [];
+        $items = [];
+        foreach ($rows as $r) {
+            $items[] = [
+                'id_feature' => (int) $r['id_feature'],
+                'name' => (string) $r['name'],
+                'position' => (int) $r['position'],
+                'predefined_values' => (int) $r['predefined_values'],
+                'products' => (int) $r['products'],
+            ];
+        }
+        $out = $this->paged($items, $total, $args, 'features');
+        $out['_warnings'] = $warnings;
+
+        return $out;
+    }
+
+    public function productFeatureSet(array $args, ExecutionContext $ctx): array
+    {
+        $s = (int) $ctx->idShop;
+        $l = (int) $ctx->idLang;
+        $id = (int) $args['id_product'];
+        $p = $this->loadProduct($id, $s);
+        $valueIds = array_values(array_unique(array_map('intval', isset($args['values']) ? (array) $args['values'] : [])));
+        $removeIds = array_values(array_unique(array_map('intval', isset($args['remove_features']) ? (array) $args['remove_features'] : [])));
+        $mode = isset($args['mode']) ? (string) $args['mode'] : 'replace';
+        if (!$valueIds && !$removeIds) {
+            throw new ToolException('Nothing to do.', 'Pass values (predefined id_feature_value ids) and/or remove_features.');
+        }
+        // Product features are global: every shop of the product sees the change.
+        foreach (array_map('intval', $p->getAssociatedShops()) as $idS) {
+            $this->assertShopAllowed($ctx, $idS, sprintf('Product #%d (its features are shared by all its shops)', $id));
+        }
+
+        $errors = [];
+        // Requested values: must exist, be predefined and belong to a feature of this shop.
+        $byFeature = [];
+        if ($valueIds) {
+            $rows = $this->db()->executeS(
+                'SELECT fv.`id_feature_value`, fv.`id_feature`, fv.`custom`, fs.`id_feature` AS in_shop
+                FROM `' . _DB_PREFIX_ . 'feature_value` fv
+                LEFT JOIN `' . _DB_PREFIX_ . 'feature_shop` fs ON fs.`id_feature` = fv.`id_feature` AND fs.`id_shop` = ' . $s . '
+                WHERE fv.`id_feature_value` IN (' . implode(',', $valueIds) . ')'
+            ) ?: [];
+            $found = [];
+            foreach ($rows as $r) {
+                $found[(int) $r['id_feature_value']] = $r;
+            }
+            foreach ($valueIds as $v) {
+                if (!isset($found[$v])) {
+                    $errors[] = sprintf('Feature value #%d does not exist.', $v);
+                } elseif ((int) $found[$v]['custom'] === 1) {
+                    $errors[] = sprintf('Feature value #%d is a custom (per-product) value; only predefined values can be assigned.', $v);
+                } elseif (!$found[$v]['in_shop']) {
+                    $errors[] = sprintf('Feature value #%d belongs to feature #%d, which is not available in shop #%d.', $v, (int) $found[$v]['id_feature'], $s);
+                } else {
+                    $byFeature[(int) $found[$v]['id_feature']][] = $v;
+                }
+            }
+        }
+        foreach ($removeIds as $f) {
+            if (isset($byFeature[$f])) {
+                $errors[] = sprintf('Feature #%d is both in values and in remove_features.', $f);
+            }
+        }
+        if (!self::multiValueFeatures()) {
+            foreach ($byFeature as $f => $vals) {
+                if (count($vals) > 1 || $mode === 'add') {
+                    $errors[] = sprintf('This PrestaShop version allows only one value per feature (feature #%d); use mode=replace with one value.', $f);
+                }
+            }
+        }
+        if ($errors) {
+            throw new ToolException('Validation failed: ' . implode(' | ', $errors), 'Use catalog_feature_list to find predefined values; nothing was saved.');
+        }
+
+        $current = $this->productFeatureRows($id, $l);
+        $currentByFeature = [];
+        foreach ($current as $r) {
+            $currentByFeature[$r['id_feature']][] = $r;
+        }
+
+        $toDelete = [];   // [id_feature, id_feature_value, custom]
+        $toInsert = [];   // [id_feature, id_feature_value]
+        foreach ($byFeature as $f => $vals) {
+            $have = isset($currentByFeature[$f]) ? $currentByFeature[$f] : [];
+            $haveIds = array_column($have, 'id_feature_value');
+            if ($mode === 'replace') {
+                foreach ($have as $r) {
+                    if (!in_array($r['id_feature_value'], $vals, true)) {
+                        $toDelete[] = $r;
+                    }
+                }
+            }
+            foreach ($vals as $v) {
+                if (!in_array($v, $haveIds, true)) {
+                    $toInsert[] = [$f, $v];
+                }
+            }
+        }
+        $removedFeatures = [];
+        foreach ($removeIds as $f) {
+            if (empty($currentByFeature[$f])) {
+                $ctx->addWarning(sprintf('Feature #%d is not set on product #%d; nothing to remove.', $f, $id));
+                continue;
+            }
+            $removedFeatures[] = $f;
+            foreach ($currentByFeature[$f] as $r) {
+                $toDelete[] = $r;
+            }
+        }
+
+        $valueText = $this->featureValueTexts(array_column($toInsert, 1), $l);
+        foreach ($this->groupChanges($toDelete, $toInsert, $currentByFeature, $valueText, $mode) as $f => $c) {
+            $ctx->recordChange('product_feature', $id, 'feature #' . $f . ($c['name'] !== '' ? ' (' . $c['name'] . ')' : ''), $c['before'], $c['after'], null, $l);
+        }
+        foreach ($toDelete as $r) {
+            if ($r['custom']) {
+                $ctx->addWarning(sprintf('The custom value "%s" of feature #%d is replaced by a predefined value and deleted.', $r['value'], $r['id_feature']));
+            }
+        }
+
+        if (!$ctx->dryRun && ($toDelete || $toInsert)) {
+            $db = $this->dbWrite();
+            foreach ($toDelete as $r) {
+                $db->delete('feature_product', '`id_product` = ' . $id . ' AND `id_feature` = ' . (int) $r['id_feature'] . ' AND `id_feature_value` = ' . (int) $r['id_feature_value']);
+                if ($r['custom']) {
+                    // Custom values belong to this product only; PrestaShop deletes them with the link.
+                    $db->delete('feature_value', '`id_feature_value` = ' . (int) $r['id_feature_value'] . ' AND `custom` = 1');
+                    $db->delete('feature_value_lang', '`id_feature_value` = ' . (int) $r['id_feature_value']);
+                }
+            }
+            foreach ($toInsert as $ins) {
+                $db->insert('feature_product', ['id_feature' => (int) $ins[0], 'id_product' => $id, 'id_feature_value' => (int) $ins[1]], false, true, \Db::INSERT_IGNORE);
+            }
+            $this->afterFeatureChange($id, $s);
+        }
+
+        return [
+            'id_product' => $id,
+            'mode' => $mode,
+            'values_added' => count($toInsert),
+            'values_removed' => count($toDelete),
+            'features_removed' => $removedFeatures,
+            'features' => $ctx->dryRun ? null : $this->formatProductFeatures($this->productFeatureRows($id, $l)),
+        ];
+    }
+
+    /**
+     * @throws ToolException
+     */
+    private function featureRow(int $idFeature, int $idShop, int $idLang): array
+    {
+        $r = $this->db()->getRow(
+            'SELECT f.`id_feature`, fl.`name`, fs.`id_feature` AS in_shop FROM `' . _DB_PREFIX_ . 'feature` f
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = f.`id_feature` AND fl.`id_lang` = ' . $idLang . '
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_shop` fs ON fs.`id_feature` = f.`id_feature` AND fs.`id_shop` = ' . $idShop . '
+            WHERE f.`id_feature` = ' . $idFeature
+        );
+        if (!$r) {
+            throw new ToolException(sprintf('Feature #%d does not exist.', $idFeature), 'Call catalog_feature_list without id_feature.');
+        }
+        if (!$r['in_shop']) {
+            throw new ToolException(sprintf('Feature #%d is not available in shop #%d.', $idFeature, $idShop));
+        }
+
+        return ['id_feature' => (int) $r['id_feature'], 'name' => (string) $r['name']];
+    }
+
+    /** Rows of feature_product for a product, with names, values and the custom flag. */
+    private function productFeatureRows(int $idProduct, int $idLang): array
+    {
+        $rows = $this->db()->executeS(
+            'SELECT fp.`id_feature`, fp.`id_feature_value`, fl.`name`, fvl.`value`, IFNULL(fv.`custom`, 0) AS custom
+            FROM `' . _DB_PREFIX_ . 'feature_product` fp
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature` f ON f.`id_feature` = fp.`id_feature`
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = fp.`id_feature` AND fl.`id_lang` = ' . $idLang . '
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_value` fv ON fv.`id_feature_value` = fp.`id_feature_value`
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_value_lang` fvl ON fvl.`id_feature_value` = fp.`id_feature_value` AND fvl.`id_lang` = ' . $idLang . '
+            WHERE fp.`id_product` = ' . $idProduct . '
+            ORDER BY f.`position`, fp.`id_feature`, fvl.`value`'
+        ) ?: [];
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'id_feature' => (int) $r['id_feature'],
+                'id_feature_value' => (int) $r['id_feature_value'],
+                'name' => (string) $r['name'],
+                'value' => (string) $r['value'],
+                'custom' => (bool) $r['custom'],
+            ];
+        }
+
+        return $out;
+    }
+
+    private function formatProductFeatures(array $rows): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            $f = $r['id_feature'];
+            if (!isset($out[$f])) {
+                $out[$f] = ['id_feature' => $f, 'name' => $r['name'], 'values' => []];
+            }
+            $out[$f]['values'][] = ['id_feature_value' => $r['id_feature_value'], 'value' => $r['value'], 'custom' => $r['custom']];
+        }
+
+        return array_values($out);
+    }
+
+    private function featureValueTexts(array $ids, int $idLang): array
+    {
+        $ids = array_filter(array_map('intval', $ids));
+        if (!$ids) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->db()->executeS(
+            'SELECT fv.`id_feature_value`, fvl.`value`, fl.`name` FROM `' . _DB_PREFIX_ . 'feature_value` fv
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_value_lang` fvl ON fvl.`id_feature_value` = fv.`id_feature_value` AND fvl.`id_lang` = ' . $idLang . '
+            LEFT JOIN `' . _DB_PREFIX_ . 'feature_lang` fl ON fl.`id_feature` = fv.`id_feature` AND fl.`id_lang` = ' . $idLang . '
+            WHERE fv.`id_feature_value` IN (' . implode(',', $ids) . ')'
+        ) ?: [] as $r) {
+            $out[(int) $r['id_feature_value']] = ['value' => (string) $r['value'], 'name' => (string) $r['name']];
+        }
+
+        return $out;
+    }
+
+    /** One before/after entry per touched feature, values shown as "text (#id)". */
+    private function groupChanges(array $toDelete, array $toInsert, array $currentByFeature, array $valueText, string $mode): array
+    {
+        $label = function ($id, $text) {
+            return ($text !== '' ? $text : '?') . ' (#' . $id . ')';
+        };
+        $touched = [];
+        foreach ($toDelete as $r) {
+            $touched[$r['id_feature']] = true;
+        }
+        foreach ($toInsert as $ins) {
+            $touched[$ins[0]] = true;
+        }
+        $out = [];
+        foreach (array_keys($touched) as $f) {
+            $have = isset($currentByFeature[$f]) ? $currentByFeature[$f] : [];
+            $name = $have ? $have[0]['name'] : '';
+            $before = [];
+            foreach ($have as $r) {
+                $before[$r['id_feature_value']] = $label($r['id_feature_value'], $r['value']);
+            }
+            $after = $before;
+            foreach ($toDelete as $r) {
+                if ($r['id_feature'] === $f) {
+                    unset($after[$r['id_feature_value']]);
+                }
+            }
+            foreach ($toInsert as $ins) {
+                if ($ins[0] === $f) {
+                    $t = isset($valueText[$ins[1]]) ? $valueText[$ins[1]] : ['value' => '', 'name' => ''];
+                    $after[$ins[1]] = $label($ins[1], $t['value']);
+                    $name = $name !== '' ? $name : $t['name'];
+                }
+            }
+            $out[$f] = [
+                'name' => $name,
+                'before' => $before ? implode(', ', $before) : null,
+                'after' => $after ? implode(', ', $after) : null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Caches, search index and faceted-search cache after feature_product changed. */
+    private function afterFeatureChange(int $idProduct, int $idShop): void
+    {
+        $this->dbWrite()->execute('UPDATE `' . _DB_PREFIX_ . 'product` SET `date_upd` = NOW(), `indexed` = 0 WHERE `id_product` = ' . $idProduct);
+        $this->dbWrite()->execute('UPDATE `' . _DB_PREFIX_ . 'product_shop` SET `date_upd` = NOW(), `indexed` = 0 WHERE `id_product` = ' . $idProduct);
+        if (method_exists('Product', 'resetStaticCache')) {
+            \Product::resetStaticCache();
+        }
+        \Cache::clean('Product::getFeaturesStatic_*');
+        if ($this->conf('PS_SEARCH_INDEXATION', $idShop)) {
+            try {
+                \Search::indexation(false, $idProduct);
+            } catch (\Throwable $e) {
+                // The product stays flagged indexed = 0 and is picked up by the next rebuild.
+            }
+        }
+        if (\Module::isEnabled('ps_facetedsearch')) {
+            $faceted = \Module::getInstanceByName('ps_facetedsearch');
+            if ($faceted && method_exists($faceted, 'invalidateLayeredFilterBlockCache')) {
+                $faceted->invalidateLayeredFilterBlockCache();
+            }
+        }
+    }
+
+    /** Predefined (non-custom) feature values; custom is NULL on some old rows. */
+    private static function predefinedSql(string $alias): string
+    {
+        return 'IFNULL(' . $alias . '.`custom`, 0) = 0';
+    }
+
+    /**
+     * Several values of one feature per product need feature_product's
+     * primary key to include id_feature_value (all 1.7.3+ installs).
+     */
+    private static function multiValueFeatures(): bool
+    {
+        static $multi = null;
+        if ($multi === null) {
+            $cols = \Db::getInstance()->executeS('SHOW KEYS FROM `' . _DB_PREFIX_ . 'feature_product` WHERE `Key_name` = \'PRIMARY\'') ?: [];
+            $multi = in_array('id_feature_value', array_column($cols, 'Column_name'), true);
+        }
+
+        return $multi;
     }
 
     public function combinationList(array $args, ExecutionContext $ctx): array

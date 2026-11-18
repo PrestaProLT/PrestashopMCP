@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 — 2026-11-18
+
+* `catalog_feature_list`: features of the shop and their predefined values.
+* `catalog_product_feature_set`: assign predefined feature values to a product (replace or add
+  per feature) and remove features. Custom free-text values and new features/values are refused;
+  a custom value replaced by a predefined one is deleted, as the back office does. Search index
+  and faceted-search cache are refreshed.
+* `catalog_product_get` now returns feature and value ids and the custom flag.
+
 ## 1.0.0 — 2026-11-17
 
 First release.

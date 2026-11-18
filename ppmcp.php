@@ -29,7 +29,7 @@ class PpMcp extends Module
     {
         $this->name = 'ppmcp';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'PrestaPro';
         $this->need_instance = 0;
         $this->bootstrap = true;
